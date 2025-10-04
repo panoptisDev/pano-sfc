@@ -1,0 +1,22 @@
+.idea
+.deps
+build
+contracts/artifacts
+internal/rpc/contracts
+.deploys
+.states
+
+node_modules
+.env
+
+# solidity-coverage files
+/coverage
+/coverage.json
+
+# Hardhat files
+/cache
+/artifacts
+
+# TypeChain files
+/typechain
+/typechain-types

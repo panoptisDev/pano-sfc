@@ -25,14 +25,23 @@ const config: HardhatUserConfig = {
   networks: {
     hardhat: {
       allowUnlimitedContractSize: true,
+      allowBlocksWithSameTimestamp: true,
     },
     pano: {
-      url: 'https://rpc.panoptis.com/',
-      accounts: [process.env.PRIVATE_KEY!!],
+      url: 'https://rpc.panolabs.com/',
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY!!] : [],
     },
     testnet: {
-      url: 'https://rpc.testnet.panoptis.com/',
-      accounts: [process.env.PRIVATE_KEY!!],
+      url: 'https://rpc.testnet.panolabs.com/',
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY!!] : [],
+    },
+    blaze: {
+      url: 'https://rpc.blaze.panolabs.com/',
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY!!] : [],
+    },
+    local: {
+      url: 'http://localhost:18545/',
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY!!] : [],
     },
   },
   gasReporter: {
@@ -71,6 +80,7 @@ const config: HardhatUserConfig = {
         salt: '0x0000000000000000000000000000000000000000000000000000000000000000',
       },
     },
+    requiredConfirmations: 1, // sufficient on pano
   },
 };
 

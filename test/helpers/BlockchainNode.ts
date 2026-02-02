@@ -1,6 +1,7 @@
-import { UnitTestSFC } from '../../typechain-types';
+import { SFC } from '../../typechain-types';
 import { TransactionResponse } from 'ethers';
 import { ethers } from 'hardhat';
+import { time } from '@nomicfoundation/hardhat-network-helpers';
 
 class ValidatorMetrics {
   public readonly offlineTime: number;
@@ -17,11 +18,12 @@ class ValidatorMetrics {
 }
 
 class BlockchainNode {
-  public readonly sfc: UnitTestSFC;
+  public readonly sfc: SFC;
   public validatorWeights: Map<bigint, bigint>;
   public nextValidatorWeights: Map<bigint, bigint>;
+  public totalWeight: bigint = 0n;
 
-  constructor(sfc: UnitTestSFC) {
+  constructor(sfc: SFC) {
     this.sfc = sfc;
     this.validatorWeights = new Map();
     this.nextValidatorWeights = new Map();
@@ -33,12 +35,14 @@ class BlockchainNode {
     for (const log of logs) {
       const parsedLog = iface.parseLog(log);
       if (parsedLog?.name === 'UpdateValidatorWeight') {
-        const validatorID = parsedLog.args.validatorID;
-        const weight = parsedLog.args.weight;
-        if (weight == 0) {
+        const validatorID = ethers.toBigInt(parsedLog.args.validatorID);
+        const weight = ethers.toBigInt(parsedLog.args.weight);
+        this.totalWeight -= this.nextValidatorWeights.get(validatorID) ?? 0n;
+        if (weight === 0n) {
           this.nextValidatorWeights.delete(validatorID);
         } else {
           this.nextValidatorWeights.set(validatorID, weight);
+          this.totalWeight += weight;
         }
       }
     }
@@ -64,7 +68,7 @@ class BlockchainNode {
       [[], [], [], []] as [number[], number[], number[], bigint[]],
     );
 
-    await this.sfc.advanceTime(duration);
+    await time.increase(duration);
     await this.handleTx(await this.sfc.sealEpoch(offlineTimes, offlineBlocks, uptimes, originatedTxsFees));
     await this.handleTx(await this.sfc.sealEpochValidators(nextValidatorIds));
 

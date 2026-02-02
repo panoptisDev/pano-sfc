@@ -57,8 +57,8 @@ describe('SFC', () => {
 
       it('Should succeed and upgrade', async function () {
         // try updating some variable
-        const newContsManager = ethers.Wallet.createRandom();
-        await this.sfc.connect(this.owner).updateConstsAddress(newContsManager);
+        const newConstsManager = ethers.Wallet.createRandom();
+        await this.sfc.connect(this.owner).updateConstsAddress(newConstsManager);
 
         // get the implementation address
         // the address is stored at slot keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
@@ -67,11 +67,12 @@ describe('SFC', () => {
           '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc',
         );
 
-        // upgrade proxy with unit test sfc - to skip bytecode optimization and replace the implementation for real
-        await upgrades.upgradeProxy(this.sfc, (await ethers.getContractFactory('UnitTestSFC')).connect(this.owner));
+        const newImpl = await ethers.deployContract('SFC');
+        // upgrade proxy with new implementation
+        await this.sfc.connect(this.owner).upgradeToAndCall(newImpl, '0x');
 
         // check if the variable is still the same
-        expect(await this.sfc.constsAddress()).to.equal(newContsManager);
+        expect(await this.sfc.constsAddress()).to.equal(newConstsManager);
 
         // check that the implementation address changed
         const newImplementation = await ethers.provider.getStorage(
@@ -130,6 +131,63 @@ describe('NodeDriver', () => {
         ).to.be.revertedWithCustomError(this.nodeDriver, 'OwnableUnauthorizedAccount');
       });
 
+      it('Should be disabled', async function () {
+        await expect(
+          upgrades.upgradeProxy(this.nodeDriver, (await ethers.getContractFactory('NodeDriver')).connect(this.owner)),
+        ).to.be.revertedWithCustomError(this.nodeDriver, 'UpgradesDisabled');
+      });
+    });
+  });
+});
+
+describe('NodeDriverAuth', () => {
+  const fixture = async () => {
+    const [user, owner] = await ethers.getSigners();
+    const nodeDriverAuth = await upgrades.deployProxy(await ethers.getContractFactory('NodeDriverAuth'), {
+      kind: 'uups',
+      initializer: false,
+    });
+
+    const sfc = ethers.Wallet.createRandom();
+    const nodeDriver = ethers.Wallet.createRandom();
+
+    await nodeDriverAuth.initialize(sfc, nodeDriver, owner);
+
+    return {
+      owner,
+      user,
+      nodeDriverAuth,
+      nodeDriver,
+      sfc,
+    };
+  };
+
+  beforeEach(async function () {
+    Object.assign(this, await loadFixture(fixture));
+  });
+
+  describe('Initialization', () => {
+    it('Should succeed and initialize', async function () {
+      expect(await this.nodeDriverAuth.owner()).to.equal(this.owner);
+    });
+
+    it('Should revert when already initialized', async function () {
+      await expect(this.nodeDriverAuth.initialize(this.sfc, this.nodeDriver, this.owner)).to.be.revertedWithCustomError(
+        this.nodeDriverAuth,
+        'InvalidInitialization',
+      );
+    });
+
+    describe('Upgrade', () => {
+      it('Should revert when not owner', async function () {
+        await expect(
+          upgrades.upgradeProxy(
+            this.nodeDriverAuth,
+            (await ethers.getContractFactory('NodeDriverAuth')).connect(this.user),
+          ),
+        ).to.be.revertedWithCustomError(this.nodeDriverAuth, 'OwnableUnauthorizedAccount');
+      });
+
       it('Should succeed and upgrade', async function () {
         // get the implementation address
         // the address is stored at slot keccak-256 hash of "eip1967.proxy.implementation" subtracted by 1
@@ -137,19 +195,15 @@ describe('NodeDriver', () => {
           this.nodeDriver,
           '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc',
         );
-
         // deploy new implementation contract
-        const newImpl = await ethers.deployContract('NodeDriver');
-
+        const newImpl = await ethers.deployContract('NodeDriverAuth');
         // upgrade proxy with new implementation
-        await this.nodeDriver.connect(this.owner).upgradeToAndCall(newImpl, '0x');
-
+        await this.nodeDriverAuth.connect(this.owner).upgradeToAndCall(newImpl, '0x');
         // check that the implementation address changed
         const newImplementationAddress = await ethers.provider.getStorage(
-          this.nodeDriver,
+          this.nodeDriverAuth,
           '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc',
         );
-
         expect(newImplementationAddress).to.not.equal(implementationAddr);
         expect(ethers.AbiCoder.defaultAbiCoder().decode(['address'], newImplementationAddress)[0]).to.equal(
           await newImpl.getAddress(),
